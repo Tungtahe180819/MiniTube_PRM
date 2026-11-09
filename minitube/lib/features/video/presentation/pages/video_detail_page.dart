@@ -107,7 +107,11 @@ class _VideoDetailPageState extends State<VideoDetailPage>
     } catch (_) {
       if (mounted && generation == ticket) {
         setState(
-          () => error = video == null ? 'This video is no longer available.' : 'Unable to open this local video. The owner may need to select the file again.',
+          () => error = video == null
+              ? 'This video is no longer available.'
+              : ApiConstants.useMock
+              ? 'Unable to open this local video. The owner may need to select the file again.'
+              : 'Unable to play this video. Check your connection and retry. The file may be unavailable or use an unsupported format.',
         );
       }
     }

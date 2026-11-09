@@ -1,6 +1,6 @@
 # MiniTube backend
 
-Node.js/Express + MySQL API for device-file upload and internal media streaming. This stage is not yet connected to the Flutter UI; Flutter still uses its mock/local-file repository.
+Node.js/Express + MySQL API for device-file upload and internal media streaming. Connected to the Flutter frontend in API mode. The backend is a standalone sibling folder named Server; minitube contains only the Flutter frontend.
 
 ## 1. Create a database
 
@@ -16,7 +16,7 @@ Do not use these CREATE statements against an existing account without checking 
 
 ## 2. Configure locally
 
-From the server directory:
+From D:\FALL26\PRM393\PRJ_PRM\Server:
 
 ```powershell
 Copy-Item .env.example .env

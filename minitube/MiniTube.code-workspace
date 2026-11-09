@@ -1,0 +1,6 @@
+{
+  "folders": [
+    { "name": "MiniTube FE", "path": "." },
+    { "name": "MiniTube BE", "path": "../Server" }
+  ]
+}

@@ -10,4 +10,4 @@ Run the existing Chrome command in RUN_API.md, then hot restart. Try posting/del
 
 Validation: MySQL/API integration tested using two disposable accounts: channel persistence, public channel retrieval, comment authorship denial, history upsert, cross-account history isolation, and Clear all. Existing upload/range/deletion tests also pass. Flutter regression: 11 passed; live HTTP adapter test passed. Manual playback/UI verification remains required.
 
-Remaining: replacing a server video file, upload percentage/cancel, server profile avatar persistence. Current comments/channel-video endpoints return all records rather than paginating; History is paginated. Existing mock mode is preserved for offline frontend work.
+File replacement and upload percentage/cancel are now implemented; see UPLOAD_PROGRESS.md. Remaining: server profile avatar persistence. Current comments/channel-video endpoints return all records rather than paginating; History is paginated. Existing mock mode is preserved for offline frontend work.
