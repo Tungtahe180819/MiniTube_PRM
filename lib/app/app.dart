@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../core/constants/api_constants.dart';
+import '../features/auth/data/repositories/remote_auth_repository.dart';
+
 import 'router/app_router.dart';
 import '../features/auth/data/repositories/auth_repository_impl.dart';
 import '../features/auth/presentation/auth_controller.dart';
@@ -12,7 +15,9 @@ class MiniTubeApp extends StatefulWidget {
 }
 
 class _MiniTubeAppState extends State<MiniTubeApp> {
-  late final auth = AuthController(MockAuthRepository());
+  late final auth = AuthController(
+    ApiConstants.useMock ? MockAuthRepository() : RemoteAuthRepository(),
+  );
   @override
   void dispose() {
     auth.dispose();

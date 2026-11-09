@@ -16,7 +16,36 @@ class _MyChannelPageState extends State<MyChannelPage> {
   final name = TextEditingController(),
       description = TextEditingController(),
       avatar = TextEditingController();
-  bool loaded = false;
+  bool loaded = false, busy = false;
+  bool loading = true;
+  String? loadError;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!loaded) {
+      loaded = true;
+      load();
+    }
+  }
+
+  Future<void> load() async {
+    final user = AuthScope.of(context).user;
+    if (user == null) return;
+    try {
+      final c = await widget.repository.fetchMyChannel(user);
+      if (!mounted) return;
+      setState(() {
+        loading = false;
+        name.text = c.name;
+        description.text = c.description;
+        avatar.text = c.avatarUrl ?? '';
+        loadError = null;
+      });
+    } catch (e) {
+      if (mounted) setState(() => loadError = e.toString());
+    }
+  }
+
   @override
   void dispose() {
     name.dispose();
@@ -28,16 +57,18 @@ class _MyChannelPageState extends State<MyChannelPage> {
   @override
   Widget build(BuildContext context) {
     final user = AuthScope.of(context).user;
-    if (user != null && !loaded) {
-      final c = widget.repository.myChannel(user);
-      name.text = c.name;
-      description.text = c.description;
-      avatar.text = c.avatarUrl ?? '';
-      loaded = true;
-    }
     return Scaffold(
       appBar: AppBar(title: const Text('My channel')),
-      body: user == null
+      body: user != null && loading && loadError == null
+          ? const Center(child: CircularProgressIndicator())
+          : loadError != null
+          ? Center(
+              child: TextButton(
+                onPressed: load,
+                child: Text("$loadError — Retry"),
+              ),
+            )
+          : user == null
           ? const Center(child: Text('Please login to manage your channel.'))
           : Center(
               child: ConstrainedBox(
@@ -80,21 +111,40 @@ class _MyChannelPageState extends State<MyChannelPage> {
                           ),
                           const SizedBox(height: 24),
                           FilledButton(
-                            onPressed: () {
-                              if (!form.currentState!.validate()) return;
-                              widget.repository.updateChannel(
-                                user,
-                                name.text,
-                                description.text,
-                                avatar.text.trim().isEmpty
-                                    ? null
-                                    : avatar.text.trim(),
-                              );
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Changes saved.')),
-                              );
-                            },
-                            child: const Text('Save channel'),
+                            onPressed: busy
+                                ? null
+                                : () async {
+                                    if (!form.currentState!.validate()) return;
+                                    setState(() => busy = true);
+                                    try {
+                                      await widget.repository.saveChannel(
+                                        user,
+                                        name.text,
+                                        description.text,
+                                        avatar.text.trim().isEmpty
+                                            ? null
+                                            : avatar.text.trim(),
+                                      );
+                                      if (!mounted) return;
+                                      ScaffoldMessenger.of(this.context)
+                                          .showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Changes saved.'),
+                                            ),
+                                          );
+                                    } catch (e) {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(
+                                          this.context,
+                                        ).showSnackBar(
+                                          SnackBar(content: Text(e.toString())),
+                                        );
+                                      }
+                                    } finally {
+                                      if (mounted) setState(() => busy = false);
+                                    }
+                                  },
+                            child: Text(busy ? 'Saving…' : 'Save channel'),
                           ),
                           TextButton(
                             onPressed: () =>

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/constants/api_constants.dart';
+
 import '../../../../core/validation/validators.dart';
 import '../../../auth/presentation/auth_controller.dart';
 
@@ -130,14 +132,15 @@ class _ProfilePageState extends State<ProfilePage> {
                   validator: (v) => Validators.requiredText(v, min: 2, max: 50),
                 ),
                 const SizedBox(height: 16),
-                TextFormField(
-                  controller: avatar,
-                  enabled: !auth.busy,
-                  decoration: const InputDecoration(
-                    labelText: 'Avatar URL (optional)',
+                if (ApiConstants.useMock)
+                  TextFormField(
+                    controller: avatar,
+                    enabled: !auth.busy,
+                    decoration: const InputDecoration(
+                      labelText: 'Avatar URL (optional)',
+                    ),
+                    validator: Validators.httpsUrl,
                   ),
-                  validator: Validators.httpsUrl,
-                ),
                 const SizedBox(height: 16),
                 FilledButton(
                   onPressed: auth.busy ? null : save,

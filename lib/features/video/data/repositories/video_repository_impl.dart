@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show ValueNotifier;
 
 import '../../../../core/domain/models.dart';
@@ -34,8 +35,7 @@ class MockVideoRepository implements VideoRepository {
       ),
       category: category,
       createdAt: DateTime.utc(2026, 10, 29).subtract(Duration(hours: i * 12)),
-      videoUrl:
-          'https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4',
+      videoUrl: '',
       description: 'A little inspiration from the MiniTube demo collection.',
     );
   });
@@ -147,17 +147,34 @@ class MockVideoRepository implements VideoRepository {
     revision.value++;
   }
 
+  Future<Video> persistVideo(
+    User user,
+    VideoWrite input, {
+    String? id,
+    PlatformFile? file,
+  }) async => saveVideo(user, input, id: id);
+  Future<void> removeVideo(String id, User user) async => deleteVideo(id, user);
   int nextId = 46;
   Video saveVideo(User user, VideoWrite input, {String? id}) {
     final old = id == null ? null : video(id);
     if (old != null && old.channel.ownerId != user.id) {
       throw StateError('Permission denied.');
     }
+    final path = input.localVideoPath.trim();
+    final uri = Uri.tryParse(path);
+    if (path.isEmpty ||
+        uri?.scheme == 'http' ||
+        uri?.scheme == 'https' ||
+        uri?.scheme == 'data') {
+      throw StateError(
+        'Choose a video file from your device. Video URLs are not accepted.',
+      );
+    }
     final value = Video(
       id: id ?? '${nextId++}',
       title: input.title.trim(),
       description: input.description.trim(),
-      videoUrl: input.videoUrl.trim(),
+      videoUrl: input.localVideoPath.trim(),
       thumbnailUrl: input.thumbnailUrl,
       channel: myChannel(user),
       category: categoryList.firstWhere((c) => c.id == input.categoryId),
@@ -173,7 +190,82 @@ class MockVideoRepository implements VideoRepository {
     final old = video(id);
     if (old.channel.ownerId != user.id) throw StateError('Permission denied.');
     items.remove(old);
+    for (final entries in _history.values) {
+      entries.remove(id);
+    }
     commentItems.removeWhere((c) => c.videoId == id);
     revision.value++;
   }
+
+  final Map<String, Map<String, DateTime>> _history = {};
+  void recordHistory(String userId, String videoId) {
+    video(videoId);
+    _history.putIfAbsent(userId, () => {})[videoId] = DateTime.now().toUtc();
+  }
+
+  PageResult<HistoryItem> history(String userId, {int page = 1}) {
+    final entries =
+        (_history[userId] ?? {}).entries
+            .where((e) => items.any((v) => v.id == e.key))
+            .toList()
+          ..sort((a, b) {
+            final time = b.value.compareTo(a.value);
+            return time != 0
+                ? time
+                : int.parse(b.key).compareTo(int.parse(a.key));
+          });
+    return PageResult(
+      entries
+          .skip((page - 1) * 20)
+          .take(20)
+          .map((e) => HistoryItem(video(e.key), e.value))
+          .toList(),
+      entries.length,
+      page,
+      20,
+    );
+  }
+
+  void deleteHistory(String userId, {String? videoId}) {
+    if (videoId == null) {
+      _history.remove(userId);
+    } else {
+      _history[userId]?.remove(videoId);
+    }
+  }
+
+  Future<List<Comment>> fetchComments(String id) async => comments(id);
+  Future<void> postComment(String id, User author, String content) async {
+    addComment(id, author, content);
+  }
+
+  Future<void> removeComment(String id, String userId) async {
+    deleteComment(id, userId);
+  }
+
+  Future<void> trackHistory(String userId, String videoId) async {
+    recordHistory(userId, videoId);
+  }
+
+  Future<PageResult<HistoryItem>> fetchHistory(
+    String userId, {
+    int page = 1,
+  }) async => history(userId, page: page);
+  Future<void> removeHistory(String userId, {String? videoId}) async {
+    deleteHistory(userId, videoId: videoId);
+  }
+
+  Future<Channel> fetchMyChannel(User user) async => myChannel(user);
+  Future<void> saveChannel(
+    User user,
+    String name,
+    String description,
+    String? avatar,
+  ) async {
+    updateChannel(user, name, description, avatar);
+  }
+
+  Future<Channel> fetchChannel(String id) async => channel(id);
+  Future<List<Video>> channelVideos(String id) async =>
+      items.where((v) => v.channel.id == id).toList();
 }

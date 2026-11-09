@@ -73,16 +73,16 @@ class VideoWrite {
   const VideoWrite({
     required this.title,
     required this.description,
-    required this.videoUrl,
+    required this.localVideoPath,
     required this.categoryId,
     this.thumbnailUrl,
   });
-  final String title, description, videoUrl, categoryId;
+  final String title, description, localVideoPath, categoryId;
   final String? thumbnailUrl;
   Map<String, dynamic> toJson() => {
     'title': title.trim(),
     'description': description.trim(),
-    'videoUrl': videoUrl.trim(),
+    'localVideoPath': localVideoPath.trim(),
     'thumbnailUrl': thumbnailUrl?.trim().isEmpty == true
         ? null
         : thumbnailUrl?.trim(),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'video_thumbnail.dart';
+
 import '../../../../core/domain/models.dart';
 
 class VideoCard extends StatelessWidget {
@@ -38,6 +40,9 @@ class VideoCard extends StatelessWidget {
                         size: 64,
                         color: Colors.white70,
                       ),
+                    ),
+                    Positioned.fill(
+                      child: VideoThumbnail(url: video.thumbnailUrl),
                     ),
                     Positioned(
                       left: 16,

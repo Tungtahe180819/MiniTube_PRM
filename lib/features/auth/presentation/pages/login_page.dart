@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/constants/api_constants.dart';
+
 import '../../../../core/validation/validators.dart';
 import '../auth_controller.dart';
 
@@ -174,7 +176,7 @@ class _LoginPageState extends State<LoginPage> {
                               : 'Create an account',
                         ),
                       ),
-                      if (!widget.register)
+                      if (!widget.register && ApiConstants.useMock)
                         const Text(
                           'Demo: demo@minitube.app / Demo1234',
                           textAlign: TextAlign.center,

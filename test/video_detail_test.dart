@@ -1,11 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:minitube/core/domain/models.dart';
 import 'package:minitube/features/video/data/repositories/video_repository_impl.dart';
+
 void main() {
   test('Video lookup and comment ownership validation', () {
     final repo = MockVideoRepository();
-    const owner = User(id: '1', email: 'demo@minitube.app', displayName: 'Demo');
-    expect(repo.video('1').videoUrl, startsWith('https://'));
+    const owner = User(
+      id: '1',
+      email: 'demo@minitube.app',
+      displayName: 'Demo',
+    );
+    expect(repo.video('1').videoUrl, isEmpty);
     expect(() => repo.video('missing'), throwsStateError);
     expect(() => repo.addComment('1', owner, '   '), throwsStateError);
     final comment = repo.addComment('1', owner, ' Hello ');

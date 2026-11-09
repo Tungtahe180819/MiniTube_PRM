@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../core/constants/api_constants.dart';
+import '../../features/video/data/repositories/remote_video_repository.dart';
+
+import '../../features/history/presentation/pages/history_page.dart';
+
 import '../../features/channel/presentation/pages/channel_detail_page.dart';
 
 import '../../features/video/presentation/pages/manage_video_page.dart';
@@ -15,7 +20,9 @@ import '../../features/auth/presentation/auth_controller.dart';
 import '../../features/profile/presentation/pages/profile_page.dart';
 
 abstract final class AppRouter {
-  static final videos = MockVideoRepository();
+  static final MockVideoRepository videos = ApiConstants.useMock
+      ? MockVideoRepository()
+      : RemoteVideoRepository();
   static const destinations = <String, String>{
     '/login': 'Login',
     '/register': 'Register',
@@ -123,7 +130,7 @@ class _AppShellState extends State<AppShell> {
       children: [
         HomePage(repository: videos),
         HomePage(repository: videos, search: true),
-        const FoundationPage(title: 'History'),
+        HistoryPage(repository: videos),
         const ProfilePage(),
       ],
     ),

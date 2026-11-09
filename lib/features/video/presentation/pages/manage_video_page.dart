@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+
+import '../../data/repositories/remote_video_repository.dart';
+
+import 'package:file_picker/file_picker.dart';
 
 import '../../../../core/domain/models.dart';
 import '../../../../core/validation/validators.dart';
@@ -13,6 +18,24 @@ class ManageVideoPage extends StatefulWidget {
 }
 
 class _ManageVideoPageState extends State<ManageVideoPage> {
+  String? loadError;
+  @override
+  void initState() {
+    super.initState();
+    reload();
+  }
+
+  Future<void> reload() async {
+    if (widget.repository is RemoteVideoRepository) {
+      try {
+        await (widget.repository as RemoteVideoRepository).loadMine();
+        if (mounted) setState(() => loadError = null);
+      } catch (e) {
+        if (mounted) setState(() => loadError = e.toString());
+      }
+    }
+  }
+
   Future<void> remove(Video v, User user) async {
     final yes = await showDialog<bool>(
       context: context,
@@ -34,7 +57,15 @@ class _ManageVideoPageState extends State<ManageVideoPage> {
       ),
     );
     if (yes == true && mounted) {
-      widget.repository.deleteVideo(v.id, user);
+      try {
+        await widget.repository.removeVideo(v.id, user);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(e.toString())));
+        }
+      }
+      if (!mounted) return;
       setState(() {});
     }
   }
@@ -59,6 +90,20 @@ class _ManageVideoPageState extends State<ManageVideoPage> {
           : ValueListenableBuilder(
               valueListenable: widget.repository.revision,
               builder: (context, _, child) {
+                if (loadError != null) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(loadError!),
+                        TextButton(
+                          onPressed: reload,
+                          child: const Text("Retry"),
+                        ),
+                      ],
+                    ),
+                  );
+                }
                 final videos =
                     widget.repository.items
                         .where((v) => v.channel.ownerId == user.id)
@@ -122,9 +167,12 @@ class _VideoEditorPageState extends State<VideoEditorPage> {
   final form = GlobalKey<FormState>();
   final title = TextEditingController(),
       description = TextEditingController(),
-      url = TextEditingController(),
+      mediaPath = TextEditingController(),
       thumbnail = TextEditingController();
   String category = '1';
+  String? selectedName, fileError;
+  PlatformFile? selectedFile;
+  bool uploading = false;
   bool dirty = false, saved = false;
   @override
   void initState() {
@@ -133,7 +181,7 @@ class _VideoEditorPageState extends State<VideoEditorPage> {
       final v = widget.repository.video(widget.id!);
       title.text = v.title;
       description.text = v.description;
-      url.text = v.videoUrl;
+      mediaPath.text = v.videoUrl;
       thumbnail.text = v.thumbnailUrl ?? '';
       category = v.category.id;
     }
@@ -143,7 +191,7 @@ class _VideoEditorPageState extends State<VideoEditorPage> {
   void dispose() {
     title.dispose();
     description.dispose();
-    url.dispose();
+    mediaPath.dispose();
     thumbnail.dispose();
     super.dispose();
   }
@@ -181,9 +229,9 @@ class _VideoEditorPageState extends State<VideoEditorPage> {
         (widget.id == null ||
             widget.repository.video(widget.id!).channel.ownerId == user.id);
     return PopScope(
-      canPop: !dirty || saved,
+      canPop: !uploading && (!dirty || saved),
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) leave();
+        if (!didPop && !uploading) leave();
       },
       child: Scaffold(
         appBar: AppBar(
@@ -229,14 +277,80 @@ class _VideoEditorPageState extends State<VideoEditorPage> {
                                   : null,
                             ),
                             const SizedBox(height: 16),
-                            TextFormField(
-                              controller: url,
-                              decoration: const InputDecoration(
-                                labelText: 'Video URL (HTTPS MP4)',
+                            OutlinedButton.icon(
+                              onPressed: uploading
+                                  ? null
+                                  : () async {
+                                      try {
+                                        final result = await FilePicker.platform
+                                            .pickFiles(
+                                              type: FileType.custom,
+                                              allowedExtensions: ['mp4'],
+                                              withData: kIsWeb,
+                                            );
+                                        if (result == null || !mounted) return;
+                                        final file = result.files.single;
+                                        if (file.size == 0 ||
+                                            file.size > 100 * 1024 * 1024 ||
+                                            !file.name.toLowerCase().endsWith(
+                                              '.mp4',
+                                            ) ||
+                                            (file.path == null &&
+                                                file.bytes == null &&
+                                                file.readStream == null)) {
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text(
+                                                      'Choose a readable MP4 file up to 100 MB.',
+                                                    ),
+                                                  ),
+                                                );
+                                          }
+                                          return;
+                                        }
+                                        setState(() {
+                                          mediaPath.text =
+                                              file.path ?? file.name;
+                                          selectedFile = file;
+                                          fileError = null;
+                                          selectedName = file.name;
+                                          dirty = true;
+                                        });
+                                      } catch (_) {
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Unable to read video. Please choose another file.',
+                                                  ),
+                                                ),
+                                              );
+                                        }
+                                      }
+                                    },
+                              icon: const Icon(Icons.video_file_outlined),
+                              label: Text(
+                                widget.id == null
+                                    ? 'Choose video from device'
+                                    : 'Replace video file',
                               ),
-                              validator: (v) =>
-                                  Validators.httpsUrl(v, required: true),
                             ),
+                            Text(
+                              selectedName ??
+                                  (widget.id == null
+                                      ? 'No file selected. MP4, maximum 100 MB.'
+                                      : 'Keep current video unless a replacement is selected.'),
+                            ),
+                            if (fileError != null)
+                              Text(
+                                fileError!,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                              ),
                             const SizedBox(height: 16),
                             TextFormField(
                               controller: thumbnail,
@@ -265,30 +379,91 @@ class _VideoEditorPageState extends State<VideoEditorPage> {
                               }),
                             ),
                             const SizedBox(height: 24),
+                            if (uploading &&
+                                widget.repository is RemoteVideoRepository)
+                              ValueListenableBuilder<double?>(
+                                valueListenable:
+                                    (widget.repository as RemoteVideoRepository)
+                                        .uploadProgress,
+                                builder: (context, progress, child) => Column(
+                                  children: [
+                                    LinearProgressIndicator(value: progress),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      progress == null
+                                          ? 'Preparing upload…'
+                                          : progress >= 1
+                                          ? 'File sent. Server is saving…'
+                                          : 'Uploading ${(progress * 100).floor()}%',
+                                    ),
+                                    TextButton(
+                                      onPressed: () =>
+                                          (widget.repository
+                                                  as RemoteVideoRepository)
+                                              .cancelUpload(),
+                                      child: const Text('Cancel upload'),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             FilledButton(
-                              onPressed: () {
-                                if (!form.currentState!.validate()) return;
-                                widget.repository.saveVideo(
-                                  user,
-                                  VideoWrite(
-                                    title: title.text,
-                                    description: description.text,
-                                    videoUrl: url.text,
-                                    thumbnailUrl: thumbnail.text.trim().isEmpty
-                                        ? null
-                                        : thumbnail.text.trim(),
-                                    categoryId: category,
-                                  ),
-                                  id: widget.id,
-                                );
-                                setState(() => saved = true);
-                                WidgetsBinding.instance.addPostFrameCallback((
-                                  _,
-                                ) {
-                                  if (mounted) Navigator.pop(context);
-                                });
-                              },
-                              child: const Text('Save video'),
+                              onPressed: uploading
+                                  ? null
+                                  : () async {
+                                      setState(
+                                        () => fileError =
+                                            mediaPath.text.trim().isEmpty
+                                            ? 'Choose a video file from your device.'
+                                            : null,
+                                      );
+                                      if (!form.currentState!.validate() ||
+                                          fileError != null) {
+                                        return;
+                                      }
+                                      setState(() => uploading = true);
+                                      try {
+                                        await widget.repository.persistVideo(
+                                          user,
+                                          VideoWrite(
+                                            title: title.text,
+                                            description: description.text,
+                                            localVideoPath: mediaPath.text,
+                                            thumbnailUrl:
+                                                thumbnail.text.trim().isEmpty
+                                                ? null
+                                                : thumbnail.text.trim(),
+                                            categoryId: category,
+                                          ),
+                                          id: widget.id,
+                                          file: selectedFile,
+                                        );
+                                        if (!mounted) return;
+                                        setState(() => saved = true);
+                                        WidgetsBinding.instance
+                                            .addPostFrameCallback((_) {
+                                              if (mounted) {
+                                                Navigator.pop(context);
+                                              }
+                                            });
+                                      } catch (e) {
+                                        if (mounted) {
+                                          setState(
+                                            () => fileError = e.toString(),
+                                          );
+                                        }
+                                      } finally {
+                                        if (mounted) {
+                                          setState(() => uploading = false);
+                                        }
+                                      }
+                                    },
+                              child: Text(
+                                uploading
+                                    ? 'Uploading…'
+                                    : widget.id == null
+                                    ? 'Add video from file'
+                                    : 'Save changes',
+                              ),
                             ),
                           ],
                         ),

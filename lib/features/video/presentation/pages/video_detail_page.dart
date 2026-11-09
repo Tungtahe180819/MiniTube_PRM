@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+
+import '../../../../core/constants/api_constants.dart';
+
+import '../../../../core/media/local_player.dart';
+
 import 'package:video_player/video_player.dart';
 
 import '../../../../core/domain/models.dart';
@@ -25,12 +30,52 @@ class _VideoDetailPageState extends State<VideoDetailPage>
   String? error;
   final draft = TextEditingController();
   final form = GlobalKey<FormState>();
+  List<Comment> commentData = [];
+  bool posting = false;
+  String? commentError;
+  Future<void> loadComments() async {
+    try {
+      final rows = await widget.repository.fetchComments(widget.videoId);
+      if (mounted) {
+        setState(() {
+          commentData = rows;
+          commentError = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => commentError = e.toString());
+    }
+  }
+
+  Future<void> post(User user) async {
+    if (posting || !form.currentState!.validate()) return;
+    setState(() => posting = true);
+    try {
+      await widget.repository.postComment(widget.videoId, user, draft.text);
+      draft.clear();
+      await loadComments();
+    } catch (e) {
+      if (mounted) setState(() => commentError = e.toString());
+    } finally {
+      if (mounted) setState(() => posting = false);
+    }
+  }
+
   int generation = 0;
+  String? recordedFor;
+  AuthController? auth;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    auth = AuthScope.of(context);
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     initialize();
+    loadComments();
   }
 
   Future<void> initialize() async {
@@ -45,9 +90,15 @@ class _VideoDetailPageState extends State<VideoDetailPage>
     setState(() => error = null);
     try {
       video = widget.repository.video(widget.videoId);
-      final controller = VideoPlayerController.networkUrl(
-        Uri.parse(video!.videoUrl),
-      );
+      if (video!.videoUrl.isEmpty) throw StateError('No video file available.');
+      final uri = Uri.tryParse(video!.videoUrl);
+      if (ApiConstants.useMock &&
+          (uri?.scheme == 'https' || uri?.scheme == 'http')) {
+        throw StateError('External video URLs are not supported.');
+      }
+      final controller = ApiConstants.useMock
+          ? localPlayer(video!.videoUrl)
+          : VideoPlayerController.networkUrl(Uri.parse(video!.videoUrl));
       player = controller;
       await controller.initialize().timeout(const Duration(seconds: 15));
       if (!mounted || generation != ticket) return;
@@ -56,13 +107,33 @@ class _VideoDetailPageState extends State<VideoDetailPage>
     } catch (_) {
       if (mounted && generation == ticket) {
         setState(
-          () => error = video == null ? 'This video is no longer available.' : 'Unable to play this video. Check your connection and try again.',
+          () => error = video == null ? 'This video is no longer available.' : 'Unable to open this local video. The owner may need to select the file again.',
         );
       }
     }
   }
 
   void changed() {
+    if (!mounted) return;
+    final userId = auth?.user?.id;
+    if (player?.value.isPlaying == true &&
+        player!.value.position > Duration.zero &&
+        userId != null &&
+        recordedFor != userId) {
+      widget.repository
+          .trackHistory(userId, widget.videoId)
+          .then((_) {
+            widget.repository.revision.value++;
+          })
+          .catchError((Object e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Unable to save watch history.')),
+              );
+            }
+          });
+      recordedFor = userId;
+    }
     if (mounted) setState(() {});
   }
 
@@ -104,7 +175,9 @@ class _VideoDetailPageState extends State<VideoDetailPage>
     );
     if (yes == true && mounted) {
       try {
-        widget.repository.deleteComment(comment.id, user.id);
+        await widget.repository.removeComment(comment.id, user.id);
+        await loadComments();
+        if (!mounted) return;
         setState(() {});
       } catch (_) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -120,7 +193,7 @@ class _VideoDetailPageState extends State<VideoDetailPage>
     final controller = player;
     final ready = controller?.value.isInitialized == true;
     final failed = error != null || controller?.value.hasError == true;
-    final comments = widget.repository.comments(widget.videoId);
+    final comments = commentData;
     return Scaffold(
       appBar: AppBar(title: const Text('Video details')),
       body: Center(
@@ -217,6 +290,11 @@ class _VideoDetailPageState extends State<VideoDetailPage>
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 16),
+                if (commentError != null)
+                  TextButton(
+                    onPressed: loadComments,
+                    child: Text('$commentError — Retry'),
+                  ),
                 if (user == null)
                   TextButton(
                     onPressed: () {
@@ -243,18 +321,8 @@ class _VideoDetailPageState extends State<VideoDetailPage>
                               Validators.requiredText(v, max: 500),
                         ),
                         FilledButton(
-                          onPressed: () {
-                            if (!form.currentState!.validate()) return;
-                            widget.repository.addComment(
-                              widget.videoId,
-                              user,
-                              draft.text,
-                            );
-                            draft.clear();
-                            form.currentState!.reset();
-                            setState(() {});
-                          },
-                          child: const Text('Post comment'),
+                          onPressed: posting ? null : () => post(user),
+                          child: Text(posting ? 'Posting…' : 'Post comment'),
                         ),
                       ],
                     ),

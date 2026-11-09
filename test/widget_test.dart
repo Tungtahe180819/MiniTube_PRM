@@ -70,5 +70,3 @@ void main() {
     expect(find.byTooltip('Login'), findsOneWidget);
   });
 }
-
-
