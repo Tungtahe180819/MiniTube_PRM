@@ -1,74 +1,101 @@
 # MiniTube backend
 
-Node.js/Express + MySQL API for device-file upload and internal media streaming. Connected to the Flutter frontend in API mode. The backend is a standalone sibling folder named Server; minitube contains only the Flutter frontend.
+Node.js/Express + MySQL API. Server and Flutter frontend minitube are sibling folders.
 
-## 1. Create a database
+## Database setup after cloning
 
-Open MySQL Workbench and connect using your existing local administrator account. Run the following after replacing `YOUR_STRONG_PASSWORD` with a password that you choose locally:
+Requires Node.js 20+ and MySQL 8. Start MySQL, then run db/create-database.sql in MySQL Workbench with an account allowed to create databases. It creates minitube with utf8mb4 and does not remove existing data.
+
+Use an existing local MySQL account with access to minitube, or create a dedicated account as an administrator (replace the placeholder locally):
 
 ```sql
-CREATE DATABASE minitube CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'minitube'@'localhost' IDENTIFIED BY 'YOUR_STRONG_PASSWORD';
+CREATE USER 'minitube'@'localhost' IDENTIFIED BY 'YOUR_LOCAL_PASSWORD';
 GRANT ALL PRIVILEGES ON minitube.* TO 'minitube'@'localhost';
 ```
 
-Do not use these CREATE statements against an existing account without checking its current configuration. No existing database is dropped by the initialization script. `schema.sql` creates missing tables; it is not a migration for incompatible pre-existing tables.
+Do not recreate a user that already exists. Every teammate uses their own MySQL credentials.
 
-## 2. Configure locally
-
-From D:\FALL26\PRM393\PRJ_PRM\Server:
+From Server/:
 
 ```powershell
-Copy-Item .env.example .env
+npm.cmd ci
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
-Edit `.env` locally. Set DB_PASSWORD to the chosen password and verify DB_HOST/DB_PORT. Never commit `.env`. No password needs to be sent through chat.
-
-## 3. Install and start
-
-Requires Node.js 20 or newer and MySQL 8.
+Edit .env locally: DB_HOST, DB_PORT, DB_NAME, DB_USER and DB_PASSWORD must match YOUR MySQL installation. The example uses DB_USER=minitube. Keep PORT=3000 and CORS_ORIGIN=http://localhost:5000 for the documented Chrome setup. Never overwrite an existing .env just to install the demo.
 
 ```powershell
-npm.cmd install
-npm.cmd run db:init
+npm.cmd run db:setup
 npm.cmd start
 ```
 
-Check `http://127.0.0.1:3000/health`. HTTP 200 means database access works; HTTP 503 means the database is unavailable/unconfigured. The server binds localhost only for this stage. Android physical-device/LAN configuration will be handled when connecting Flutter.
+GET http://localhost:3000/health returns 200 when MySQL is accessible, or 503 otherwise. A listening message alone does not prove database access. If Flutter loaded before the API was ready, press Retry on Home.
+
+## Tables and fields
+
+| Table | Fields |
+| --- | --- |
+| users | id, email, display_name, password_hash, created_at |
+| channels | id, owner_id, name, description, avatar_url |
+| categories | id, name |
+| videos | id, channel_id, category_id, title, description, file_name, original_name, thumbnail_url, size_bytes, created_at, updated_at |
+| auth_sessions | id, user_id, token_hash, expires_at |
+| comments | id, user_id, video_id, content, created_at |
+| watch_history | user_id + video_id primary key, last_watched_at |
+
+Schema: db/schema.sql. Commands:
+
+```powershell
+npm.cmd run db:init    # Create missing tables/categories and thumbnail column
+npm.cmd run db:seed    # Add shared demo records and internal media copies
+npm.cmd run db:setup   # Run init and seed in order
+npm.cmd run db:verify  # Seed twice; check counts and sample media bytes
+```
+
+Demo accounts: demo@minitube.test / Demo1234 and studio@minitube.test / Studio1234. Passwords use the same salted scrypt format as registration. No personal records or active sessions are exported.
+
+Sample content: 2 accounts/channels, 3 videos, 3 comments and 2 initial history examples. All videos copy the same generated 4-second test pattern with an audio tone from db/fixtures/demo.mp4 to ignored storage/videos. No FFmpeg or external download is needed. Initial history is seeded example data, not measured playback.
+
+The seed is additive and repeatable without duplicates on an unchanged database. It preserves edited records/passwords; conflicting reserved demo emails or media cause an error. Database writes are transactional; newly copied files are cleaned up on failure. Missing sample content may be recreated after deletion/replacement. There is no reset/drop command.
+
+db:init does not create the database or MySQL user. It is not a general migration for incompatible old schemas; use a separate new development database in that case, grant your user access and set DB_NAME accordingly.
 
 ## API
 
-| Method | Path | Access / purpose |
+Protected endpoints use Authorization: Bearer <token>. Identity is derived from the session, not a user ID submitted by FE.
+
+| Method | Path under /api/v1 | Purpose |
 | --- | --- | --- |
-| POST | /api/v1/auth/register | displayName, email, password; create user, channel and 24h session |
-| POST | /api/v1/auth/login | email/password; return user and bearer token |
-| POST | /api/v1/auth/logout | Bearer token; revoke current session |
-| GET | /api/v1/me | Bearer token; current account |
-| GET | /api/v1/categories | Public categories |
-| GET | /api/v1/videos | Public list; q, categoryId, page; 20 items/page |
-| GET | /api/v1/videos/:id | Public details with internal relative stream path |
-| GET | /api/v1/videos/:id/stream | Public MP4; HTTP range requests for seeking |
-| POST | /api/v1/videos | Bearer token; multipart file field video, title, description, categoryId |
-| PUT | /api/v1/videos/:id | Owner; JSON metadata only: title, description, categoryId |
-| DELETE | /api/v1/videos/:id | Owner; delete record/dependents and remove media |
+| POST | /auth/register, /auth/login, /auth/logout | Account/session creation, login, logout |
+| GET / PUT | /me | Read account / update display name |
+| GET | /categories, /videos | Public categories and filtered/paged videos |
+| GET | /videos/:id, /videos/:id/stream | Metadata and MP4 range streaming |
+| GET | /me/videos | Owned videos |
+| POST | /videos | Authenticated multipart upload |
+| PUT | /videos/:id | Owner metadata edit |
+| PUT | /videos/:id/file | Owner file replacement |
+| DELETE | /videos/:id | Owner deletion |
+| GET / POST | /videos/:id/comments | Public read / authenticated comment |
+| DELETE | /comments/:id | Author-only deletion |
+| GET / DELETE | /me/history | List 20/page / clear history |
+| PUT / DELETE | /me/history/:id | Record watch / remove history entry |
+| GET / PUT | /me/channel | Read / edit own channel |
+| GET | /channels/:id, /channels/:id/videos | Public channel and videos |
 
-Example upload in PowerShell (use an actual token from registration/login):
+Device-file MP4 upload only, up to 100 MB by default. Metadata stays in MySQL; media stays in storage/videos. Video URLs cannot be submitted. Optional image URLs must be HTTPS. Basic MP4 signature validation does not guarantee codec compatibility; the bundled fixture is H.264/yuv420p with AAC.
 
-```powershell
-curl.exe -X POST http://127.0.0.1:3000/api/v1/videos -H "Authorization: Bearer YOUR_TOKEN" -F "video=@C:\Videos\sample.mp4" -F "title=My video" -F "description=Local upload" -F "categoryId=1"
-```
+Video deletion cascades to comments/history. Failed physical cleanup is logged; a durable retry task is not implemented. Cancellation near commit may have an uncertain result; refresh Manage Videos before retrying.
 
-No video URL field is accepted. The default limit is 100 MB. Extension and basic MP4 container signature are checked; this is not transcoding, malware scanning or complete codec validation. Use a browser/Android compatible MP4 codec. Internal file names are generated UUIDs, not user-supplied paths.
+The API binds 127.0.0.1. Chrome uses localhost:3000. Android Emulator uses 10.0.2.2:3000 with suitable Android debug networking configuration; physical-device/LAN access requires additional setup.
 
-Files are kept in storage/videos, temporary uploads in storage/tmp. The directories are ignored by Git. MySQL stores metadata/file references only. Registration and video creation use transactions; failed upload writes remove the temporary/replacement file. Dependent comments/history use foreign-key cascades. File cleanup failure is logged; a durable retry/garbage-collection job is still pending. Avoid process termination during uploads; interrupted temporary files may need cleanup.
-
-## Verification and remaining work
+## Verification
 
 ```powershell
 npm.cmd test
-node --check src/app.js
+npm.cmd run db:verify
+node scripts/integration-local.mjs
 ```
 
-The media validation test checks text disguised as MP4, empty files and a valid container header. Server startup and unconfigured database health response were checked. MySQL registration/upload/streaming integration has not been run because the database/user/password still need local setup.
+The integration script additionally requires a running API. It tests transport/authorization using synthetic MP4 headers. The seed check verifies repeatability and fixture bytes; real UI/browser/Android playback still needs manual checking.
 
-Still to implement in the next stage: wire Flutter to these endpoints, upload progress/cancel, file replacement endpoint, profile/channel updates, comments/history API routes, and integration tests using a configured database. The schema includes comments/history tables, but their CRUD endpoints are not implemented in this stage.
+Do not commit .env, node_modules, storage, logs or personal SQL dumps. Only schema, public demo scripts/data and the generated fixture belong in Git.
