@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../core/constants/api_constants.dart';
 
@@ -27,6 +28,16 @@ class _VideoDetailPageState extends State<VideoDetailPage>
     with WidgetsBindingObserver {
   Video? video;
   VideoPlayerController? player;
+  bool fullscreen = false;
+
+  void toggleFullscreen() {
+    if (player?.value.isInitialized != true) return;
+    setState(() => fullscreen = !fullscreen);
+    SystemChrome.setEnabledSystemUIMode(
+      fullscreen ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+    );
+  }
+
   String? error;
   final draft = TextEditingController();
   final form = GlobalKey<FormState>();
@@ -148,6 +159,9 @@ class _VideoDetailPageState extends State<VideoDetailPage>
 
   @override
   void dispose() {
+    if (fullscreen) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
     generation++;
     WidgetsBinding.instance.removeObserver(this);
     player?.removeListener(changed);
@@ -198,6 +212,62 @@ class _VideoDetailPageState extends State<VideoDetailPage>
     final ready = controller?.value.isInitialized == true;
     final failed = error != null || controller?.value.hasError == true;
     final comments = commentData;
+    if (fullscreen && controller != null) {
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop) toggleFullscreen();
+        },
+        child: CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.escape): toggleFullscreen,
+          },
+          child: Focus(
+            autofocus: true,
+            child: Scaffold(
+              backgroundColor: Colors.black,
+              body: SafeArea(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Center(
+                      child: AspectRatio(
+                        aspectRatio: controller.value.aspectRatio,
+                        child: VideoPlayer(controller),
+                      ),
+                    ),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: ColoredBox(
+                        color: Colors.black87,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Theme(
+                            data: ThemeData.dark(),
+                            child: playbackControls(controller),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: IconButton.filledTonal(
+                        tooltip: 'Exit fullscreen',
+                        onPressed: toggleFullscreen,
+                        icon: const Icon(Icons.arrow_back),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Video details')),
       body: Center(
@@ -235,32 +305,7 @@ class _VideoDetailPageState extends State<VideoDetailPage>
                       : const Center(child: CircularProgressIndicator()),
                 ),
               ),
-              if (ready && !failed)
-                Row(
-                  children: [
-                    IconButton(
-                      tooltip: controller!.value.isPlaying ? 'Pause' : 'Play',
-                      onPressed: () => controller.value.isPlaying
-                          ? controller.pause()
-                          : controller.play(),
-                      icon: Icon(
-                        controller.value.isPlaying
-                            ? Icons.pause
-                            : Icons.play_arrow,
-                      ),
-                    ),
-                    Expanded(
-                      child: VideoProgressIndicator(
-                        controller,
-                        allowScrubbing: true,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${time(controller.value.position)} / ${time(controller.value.duration)}',
-                    ),
-                  ],
-                ),
+              if (ready && !failed) playbackControls(controller!),
               if (video != null) ...[
                 const SizedBox(height: 20),
                 Text(
@@ -360,4 +405,25 @@ class _VideoDetailPageState extends State<VideoDetailPage>
       ),
     );
   }
+
+  Widget playbackControls(VideoPlayerController controller) => Row(
+    children: [
+      IconButton(
+        tooltip: controller.value.isPlaying ? 'Pause' : 'Play',
+        onPressed: () =>
+            controller.value.isPlaying ? controller.pause() : controller.play(),
+        icon: Icon(controller.value.isPlaying ? Icons.pause : Icons.play_arrow),
+      ),
+      Expanded(child: VideoProgressIndicator(controller, allowScrubbing: true)),
+      const SizedBox(width: 8),
+      Text(
+        '${time(controller.value.position)} / ${time(controller.value.duration)}',
+      ),
+      IconButton(
+        tooltip: fullscreen ? 'Exit fullscreen' : 'Fullscreen',
+        onPressed: toggleFullscreen,
+        icon: Icon(fullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
+      ),
+    ],
+  );
 }
