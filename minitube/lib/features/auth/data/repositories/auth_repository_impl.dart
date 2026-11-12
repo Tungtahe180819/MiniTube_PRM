@@ -3,7 +3,7 @@ import '../../../../core/errors/app_exception.dart';
 import '../../domain/repositories/auth_repository.dart';
 
 /// In-memory demo adapter. Never use this credential store in production.
-class MockAuthRepository implements AuthRepository {
+class MockAuthRepository extends AuthRepository {
   final Map<String, (User, String)> _accounts = {
     'studio@minitube.app': (
       const User(
@@ -55,7 +55,14 @@ class MockAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<User> updateProfile(String name, String? avatarUrl) async {
+  Future<User> updateProfile(
+    String name,
+    String? avatarUrl, {
+    String? phoneNumber,
+    String? dateOfBirth,
+    String? gender,
+    String? bio,
+  }) async {
     await _wait();
     final old = _accounts[_email];
     if (old == null) throw const AppException('Your session has expired.');
@@ -65,6 +72,10 @@ class MockAuthRepository implements AuthRepository {
       email: old.$1.email,
       displayName: name.trim(),
       avatarUrl: url == null || url.isEmpty ? null : url,
+      phoneNumber: phoneNumber ?? old.$1.phoneNumber,
+      dateOfBirth: dateOfBirth ?? old.$1.dateOfBirth,
+      gender: gender ?? old.$1.gender,
+      bio: bio ?? old.$1.bio,
     );
     _accounts[_email!] = (user, old.$2);
     return user;

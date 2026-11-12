@@ -67,3 +67,6 @@ flutter test
 ```
 
 See Server/README.md for database/API details and minitube/RUN_API.md for manual checks. Never commit .env, node_modules, private storage uploads or Flutter build output. The tracked clip in Server/db/fixtures is intentional demo content.
+
+## Account features (Huy)
+See [ACCOUNT_FEATURES.md](ACCOUNT_FEATURES.md) for extended profiles, change password, development phone OTP and Firebase Google setup. After updating, reinstall dependencies and run the account migration before starting the server. Google/SMS credentials are not bundled.

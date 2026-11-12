@@ -8,6 +8,11 @@ class AuthController extends ChangeNotifier {
   final AuthRepository repository;
   User? user;
   bool busy = false;
+  void clearSession() {
+    user = null;
+    notifyListeners();
+  }
+
   Future<void> run(Future<User> Function() action) async {
     if (busy) return;
     busy = true;

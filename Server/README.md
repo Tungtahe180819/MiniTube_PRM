@@ -99,3 +99,6 @@ node scripts/integration-local.mjs
 The integration script additionally requires a running API. It tests transport/authorization using synthetic MP4 headers. The seed check verifies repeatability and fixture bytes; real UI/browser/Android playback still needs manual checking.
 
 Do not commit .env, node_modules, storage, logs or personal SQL dumps. Only schema, public demo scripts/data and the generated fixture belong in Git.
+
+## Extended accounts
+See [ACCOUNT_FEATURES.md](../ACCOUNT_FEATURES.md). Existing installations must run npm ci and npm run db:init with a migration-capable MySQL account. Google login requires Firebase configuration; phone OTP is a labelled local demo when AUTH_DEV_MODE=true.

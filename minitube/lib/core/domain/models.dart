@@ -4,14 +4,31 @@ class User {
     required this.email,
     required this.displayName,
     this.avatarUrl,
+    this.phoneNumber,
+    this.dateOfBirth,
+    this.gender,
+    this.bio = '',
+    this.phoneVerified = false,
+    this.hasPassword = true,
+    this.googleLinked = false,
   });
   final String id, email, displayName;
   final String? avatarUrl;
+  final String? phoneNumber, dateOfBirth, gender;
+  final String bio;
+  final bool phoneVerified, hasPassword, googleLinked;
   factory User.fromJson(Map<String, dynamic> j) => User(
     id: '${j['id']}',
     email: j['email'] ?? '',
     displayName: j['displayName'] ?? '',
     avatarUrl: j['avatarUrl'],
+    phoneNumber: j['phoneNumber'],
+    dateOfBirth: j['dateOfBirth'],
+    gender: j['gender'],
+    bio: j['bio'] ?? '',
+    phoneVerified: j['phoneVerified'] == true,
+    hasPassword: j['hasPassword'] != false,
+    googleLinked: j['googleLinked'] == true,
   );
 }
 

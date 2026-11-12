@@ -2,3 +2,8 @@ Server/.env
 Server/node_modules/
 Server/storage/
 *.log
+
+minitube/firebase-config.local.json
+Server/*service-account*.json
+Server/firebase-admin*.json
+minitube/firebase-*.local.json

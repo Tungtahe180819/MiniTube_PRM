@@ -35,6 +35,9 @@ class ApiClient {
     if (response.statusCode >= 400) {
       throw AppException(
         json?['error']?['message'] ?? 'Unable to complete request.',
+        retryAfter: int.tryParse(
+          '${json?['error']?['retryAfter'] ?? response.headers['retry-after'] ?? ''}',
+        ),
       );
     }
     return json;

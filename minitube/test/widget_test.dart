@@ -53,7 +53,21 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.widgetWithText(FilledButton, 'Login'), findsNothing);
     expect(find.text('demo@minitube.app'), findsOneWidget);
-    await tester.enterText(find.byType(TextFormField).first, 'Updated Creator');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Display name'),
+      'Updated Creator',
+    );
+    FocusManager.instance.primaryFocus?.unfocus();
+    await Scrollable.ensureVisible(
+      tester.element(find.text('Save profile')),
+      alignment: 0.5,
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.byType(SingleChildScrollView).last,
+      const Offset(0, -300),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Save profile'));
     await tester.pumpAndSettle();
     expect(find.text('Changes saved.'), findsOneWidget);

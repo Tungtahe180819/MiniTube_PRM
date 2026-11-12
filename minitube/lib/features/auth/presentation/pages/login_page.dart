@@ -4,6 +4,7 @@ import '../../../../core/constants/api_constants.dart';
 
 import '../../../../core/validation/validators.dart';
 import '../auth_controller.dart';
+import 'password_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key, this.register = false});
@@ -39,6 +40,18 @@ class _LoginPageState extends State<LoginPage> {
             ? auth.repository.register(name.text, email.text, password.text)
             : auth.repository.login(email.text, password.text),
       );
+      if (mounted) Navigator.popUntil(context, (route) => route.isFirst);
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString());
+    }
+  }
+
+  Future<void> google() async {
+    final auth = AuthScope.of(context);
+    if (auth.busy) return;
+    setState(() => error = null);
+    try {
+      await auth.run(auth.repository.googleLogin);
       if (mounted) Navigator.popUntil(context, (route) => route.isFirst);
     } catch (e) {
       if (mounted) setState(() => error = e.toString());
@@ -160,6 +173,25 @@ class _LoginPageState extends State<LoginPage> {
                               : 'Login',
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: busy ? null : google,
+                        icon: const Icon(Icons.account_circle_outlined),
+                        label: const Text('Continue with Google'),
+                      ),
+                      if (!widget.register)
+                        TextButton(
+                          onPressed: busy
+                              ? null
+                              : () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute<void>(
+                                    builder: (_) =>
+                                        const PasswordPage(reset: true),
+                                  ),
+                                ),
+                          child: const Text('Forgot password?'),
+                        ),
                       TextButton(
                         onPressed: busy
                             ? null
